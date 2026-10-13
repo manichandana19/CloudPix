@@ -1,10 +1,7 @@
 import io
 import unittest
-from unittest.mock import patch
-
 from PIL import Image
 from backend.image_processor.app import make_variants, extract_created_objects
-from backend.upload_handler import app as upload_app
 
 
 def image_bytes(size=(1200, 600), fmt="JPEG", mode="RGB"):
@@ -67,39 +64,5 @@ class ImageProcessingTests(unittest.TestCase):
     def test_extract_legacy_s3_event(self):
         event = {"Records": [{"eventSource": "aws:s3", "s3": {"bucket": {"name": "cloudpix-test"}, "object": {"key": "originals%2Fabc-123.jpg"}}}]}
         self.assertEqual(extract_created_objects(event), [("cloudpix-test", "originals/abc-123.jpg")])
-
-
-class UploadHandlerFeatureTests(unittest.TestCase):
-    def test_decorate_adds_download_urls_and_size_alias(self):
-        item = {"filename": "sample.png", "original_key": "originals/id.png", "resized_key": "processed/id/resized.png", "thumbnail_key": "processed/id/thumbnail.png", "size_bytes": 123}
-        with patch.object(upload_app, "sign_key", side_effect=lambda key, name=None: f"signed:{key}:{name}"):
-            decorated = upload_app.decorate(item)
-        self.assertTrue(decorated["original_url"].startswith("signed:originals/id.png:"))
-        self.assertTrue(decorated["resized_url"].startswith("signed:processed/id/resized.png:"))
-        self.assertTrue(decorated["thumbnail_url"].startswith("signed:processed/id/thumbnail.png:"))
-        self.assertEqual(decorated["original_size_bytes"], 123)
-
-    def test_delete_image_removes_objects_and_database_item(self):
-        item = {"image_id": "abc", "original_key": "originals/abc.jpg", "resized_key": "processed/abc/resized.jpeg", "thumbnail_key": "processed/abc/thumbnail.jpeg"}
-        with patch.object(upload_app.TABLE, "get_item", return_value={"Item": item}), \
-             patch.object(upload_app.TABLE, "delete_item") as db_delete, \
-             patch.object(upload_app.s3, "delete_object") as s3_delete:
-            result = upload_app.delete_image("abc")
-        self.assertEqual(result["statusCode"], 200)
-        self.assertEqual(len(s3_delete.call_args_list), 5)  # three known keys + fallback png variants
-        db_delete.assert_called_once_with(Key={"image_id": "abc"})
-
-    def test_delete_missing_image_returns_404(self):
-        with patch.object(upload_app.TABLE, "get_item", return_value={}):
-            result = upload_app.delete_image("missing")
-        self.assertEqual(result["statusCode"], 404)
-
-    def test_lambda_routes_delete_request(self):
-        with patch.object(upload_app, "delete_image", return_value={"statusCode": 200, "body": "{}"}) as delete:
-            result = upload_app.lambda_handler({"httpMethod": "DELETE", "pathParameters": {"image_id": "abc"}}, None)
-        self.assertEqual(result["statusCode"], 200)
-        delete.assert_called_once_with("abc")
-
-
 if __name__ == "__main__":
     unittest.main()

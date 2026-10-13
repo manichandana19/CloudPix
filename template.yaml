@@ -77,8 +77,14 @@ Resources:
       CodeUri: backend/
       Handler: upload_handler.app.lambda_handler
       Policies:
-        - S3CrudPolicy:
+        - S3WritePolicy:
             BucketName: !Ref ImagesBucket
+        - S3ReadPolicy:
+            BucketName: !Ref ImagesBucket
+        - Statement:
+            - Effect: Allow
+              Action: s3:DeleteObject
+              Resource: !Sub '${ImagesBucket.Arn}/*'
         - DynamoDBCrudPolicy:
             TableName: !Ref ImagesTable
       Events:

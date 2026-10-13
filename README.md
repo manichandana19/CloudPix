@@ -54,11 +54,7 @@ CloudPix addresses this problem through an event-driven, serverless architecture
 - Retrieve temporary download links for original images, resized images, and thumbnails.
 - Allow users to download available image variants through the dashboard.
 
-### 6. Image Deletion
-- Provide an API endpoint to delete an image and its associated stored variants.
-- Remove the corresponding DynamoDB history record.
-
-### 7. Error Handling
+### 6. Error Handling
 - Reject unsupported image formats.
 - Validate uploaded image contents on the backend.
 - Reject oversized or invalid image data.
@@ -130,7 +126,7 @@ Runs the upload/history API logic and processes images when triggered by S3 even
 Stores image records, processing status, object keys, dimensions, sizes, and other supported metadata.
 
 ### Amazon API Gateway
-Exposes HTTP endpoints used by the frontend to request upload URLs, retrieve history, check image status, and delete images.
+Exposes HTTP endpoints used by the frontend to request upload URLs, retrieve history, and check image status.
 
 ### Amazon CloudWatch
 Collects Lambda execution logs and helps troubleshoot processing errors.
@@ -201,42 +197,21 @@ python -m unittest discover -s tests -v
 
 Refer to `TESTING.md` for the test coverage and the procedures for verifying the deployed application.
 
-### Step 4: Validate the SAM Template
+### Step 4: Follow the safe setup procedure
 
-```bash
-sam validate --lint
-```
-
-### Step 5: Build the Application
-
-```bash
-sam build
-```
-
-### Step 6: Deploy to AWS
-
-After configuring the AWS CLI with credentials for the account you control, run:
-
-```bash
-sam deploy --guided
-```
-
-Follow the prompts to configure the stack name, AWS Region, and deployment options.
-
-For additional configuration and cleanup instructions, refer to `SETUP.md`.
-
-**Important:** Successful validation and building do not mean that the application has been deployed. Deployment and live AWS testing must be completed separately.
+Use `SETUP.md` for local validation and the isolated test-stack procedure. Do not run `sam deploy --guided` from this checkout: the existing `samconfig.toml` may point at the deployed `cloudpix` stack. Review a pending test-stack change set and get separate approval before executing it.
 
 ## API Endpoints
 
 The API base URL is obtained from the deployed SAM stack's `ApiBaseUrl` output.
+The frontend reuses the API base configured in the browser's CloudPix settings. For the currently specified deployment, that base URL is `https://45g0v7hvbh.execute-api.ap-south-1.amazonaws.com/prod`; confirm the target environment before using Delete. Do not test deletion with real images.
 
 | Method | Endpoint | Purpose |
 |---|---|---|
 | POST | `/uploads` | Request a presigned upload URL and create an image record |
 | GET | `/history` | Retrieve recent image records |
 | GET | `/images/{image_id}` | Retrieve an image's status, metadata, and available download URLs |
-| DELETE | `/images/{image_id}` | Delete an image and its associated stored variants |
+| DELETE | `/images/{image_id}` | Delete the image's S3 objects and DynamoDB record |
 
 ### Example Upload Request
 
@@ -262,12 +237,15 @@ CloudPix incorporates several basic security measures:
 - Generated object keys avoid relying on user-provided filenames as storage paths.
 - AWS permissions are defined through the SAM infrastructure configuration.
 - CloudWatch logs help identify processing failures.
+- The local CSPM checker statically reviews selected template settings; see [`SECURITY.md`](SECURITY.md). It does not inspect live AWS resources.
 
 ### Known Security Limitations
 
-The current minimal project configuration does not include a complete user authentication and authorization system. The API should therefore be deployed only for controlled project evaluation unless additional access controls are implemented.
+The current project intentionally has no API authentication. Anyone who can reach the API can request upload URLs, read shared image history/statuses, and delete an image when its ID is known. Keep evaluation limited to a controlled test environment and non-sensitive images; do not treat the API as suitable for public or production use.
 
 Before making the application publicly available, configure appropriate authentication, authorization, API throttling, and a restrictive CORS origin. Review the IAM policies and data-access model before using real or sensitive images.
+
+For the Unit 4 CSPM presentation, see [`SECURITY.md`](SECURITY.md). For a CloudWatch walkthrough of the existing image processor, see [`MONITORING.md`](MONITORING.md).
 
 ## Cost Considerations
 
@@ -289,10 +267,10 @@ Actual charges depend on the AWS Region, account eligibility, service usage, and
 - Use small test images.
 - Avoid repeated uploads when they are unnecessary.
 - Monitor resource usage and AWS billing.
-- Remove unused test images and resources.
-- Delete the CloudFormation stack after evaluation if the application is no longer needed.
+- Review unused test resources and any cleanup plan before acting.
+- Follow `SETUP.md` and get separate approval before cleaning up an isolated test stack. Do not target the deployed `cloudpix` stack without a production-specific review.
 
-Follow `SETUP.md` for the stack cleanup procedure.
+Use `SETUP.md` for isolated test-stack guidance. Stack or data cleanup requires a separate review and approval.
 
 ## Screenshots
 

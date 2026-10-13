@@ -92,7 +92,7 @@ def lambda_handler(event, context):
         image_id = filename.rsplit(".", 1)[0]
         try:
             item = TABLE.get_item(Key={"image_id": image_id}).get("Item")
-            if not item or item.get("status") == "Deleted":
+            if not item:
                 continue
             if item.get("status") == "Completed":
                 continue

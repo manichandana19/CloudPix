@@ -96,7 +96,10 @@ The included tests cover the following areas:
 | Legacy event compatibility | Legacy S3 notification events are handled |
 | Image metadata | Output dimensions and byte sizes are returned by image processing |
 | Download URL handling | Presigned download URLs and original-size aliases are handled |
-| Delete endpoint | Selected deletion behavior is tested, including missing-image handling |
+| Upload API compatibility | Upload records, presigned URLs, status responses, and CORS headers are tested with local mocks |
+| Image deletion | S3 object cleanup and DynamoDB deletion, including missing records and S3 failures |
+| CSPM checker | Static template findings, including the absent API authorizer, are tested |
+| Frontend delete wiring | Python source-contract tests check image-ID routing, confirmation markup, error branches, and refresh calls; they do not execute JavaScript in a browser |
 
 The exact coverage depends on the tests currently present in the repository. A test listed above should be considered covered only if the corresponding test exists and passes in the current version.
 
@@ -105,6 +108,8 @@ The exact coverage depends on the tests currently present in the repository. A t
 No. The included unit tests are intended to run locally without deploying AWS resources.
 
 However, they do not reproduce every behavior of API Gateway, S3 event delivery, IAM permissions, DynamoDB, or the complete deployed application.
+
+This repository has no JavaScript test runner or browser automation dependency. The frontend delete contract checks are static source checks only. Manually verify the confirmation, keyboard operation, disabled/loading state, HTTP 404/5xx and network-error feedback, and history/statistics refresh against mocked requests in a browser or an approved isolated test stack. Do not test by deleting real images.
 
 ---
 
@@ -122,27 +127,15 @@ A successful validation indicates that SAM can validate the template. It does no
 
 ### Build the Application
 
-```bash
-sam build
-```
-
-This prepares the application and its dependencies for deployment.
-
-The build process does not, by itself, create the live application in AWS.
+For a future isolated test deployment, follow the separate-output-directory procedure in `SETUP.md`. Do not use the default `sam build` command in this checkout if it could overwrite an existing `.aws-sam` build directory.
 
 ---
 
-## 5. Deploy Before Running AWS Integration Tests
+## 5. Prepare an isolated test deployment
 
-If the project has not been deployed yet, follow the deployment instructions in `SETUP.md`.
+Follow the isolated test-stack procedure in `SETUP.md`. Do not use `sam deploy --guided` or the checked-in `samconfig.toml`; it may select the existing `cloudpix` stack. The API has no authentication, so use only a controlled test stack and non-sensitive images. A caller who knows an image ID can delete its record. Do not point the production frontend at an unreviewed test API.
 
-The guided deployment command is:
-
-```bash
-sam deploy --guided
-```
-
-After deployment, identify the following stack outputs:
+After a separately approved test deployment, identify the following stack outputs:
 
 - `ApiBaseUrl`
 - `ImagesBucketName`
@@ -403,37 +396,17 @@ If the browser can open an image but cannot download it as a file, inspect the f
 
 ---
 
-## 10. Verify Image Deletion
+## 10. Verify the History Delete UI
 
-**Warning:** Deletion removes data. Use an image created specifically for testing.
+The table and grid history views each have a Delete action for persisted history records. This is separate from removing a not-yet-uploaded item from the local upload queue.
 
-First retrieve the history:
+1. Use mocked browser requests or an approved isolated test stack containing only disposable images. Do not run this procedure against real images.
+2. Open the delete action and verify the accessible confirmation names the image and warns that its stored original and processed outputs will be removed. Cancel once and confirm no DELETE request is sent.
+3. Confirm deletion and inspect the browser Network panel. The frontend should send `DELETE /images/<image_id>` using the `image_id` from the history response and the configured API base URL.
+4. On success, verify the image disappears and the dashboard counts update. Verify the backend response and, in an approved test environment, the image record and known S3 variants are removed.
+5. Mock or safely exercise a 404, 5xx, and network failure. Verify the error toast appears and the item stays visible. Verify the action is disabled while pending and repeated clicks do not send duplicate requests.
 
-```bash
-curl -i "$API_BASE/history"
-```
-
-Choose a test image ID from the returned records.
-
-Run:
-
-```bash
-curl -i -X DELETE "$API_BASE/images/IMAGE_ID"
-```
-
-Replace `IMAGE_ID` with the actual identifier of the test image.
-
-After a successful deletion, verify that:
-
-1. The API reports a successful deletion.
-2. The DynamoDB record is no longer present.
-3. The original S3 object is removed.
-4. The processed variants are removed.
-5. A subsequent request for the deleted record returns the expected missing-record response, normally HTTP 404.
-
-If any object or record remains, inspect the API response, Lambda logs, IAM permissions, and the stored object keys.
-
-Do not run this test against images you need to keep.
+The repository does not include a JavaScript runtime, browser automation, or frontend test framework. The Python frontend contract tests inspect source wiring only; they do not prove modal accessibility, browser behavior, API Gateway CORS, or a live deletion. Complete those checks manually in a browser against mocks or an isolated stack.
 
 ---
 
@@ -495,7 +468,6 @@ Use this table to record actual results during project evaluation.
 | DynamoDB update | Processing record is updated | To be recorded |
 | Image history | Uploaded image appears in history | To be recorded |
 | Image download | Expected image variant downloads | To be recorded |
-| Image deletion | Test image and record are removed | To be recorded |
 | Error handling | Invalid input is rejected or marked failed | To be recorded |
 
 Replace `To be recorded` with the result you actually observe. Do not mark a test as passed without executing it.
@@ -516,17 +488,16 @@ Local unit tests do not fully simulate:
 
 These behaviors require AWS integration testing.
 
-The test suite should also not be treated as proof of production readiness. The current project is intended as an academic demonstration and requires additional authentication, authorization, operational controls, and security review before public or production use.
+The API is intentionally unauthenticated: history and image status are not isolated by user. The test suite is not proof of production readiness. Add and verify authentication, authorization, API throttling, operational controls, and a reviewed data-access model before public or production use.
 
 ## 15. Cleanup After Testing
 
 To minimize unnecessary AWS charges:
 
-1. Delete disposable test images that are no longer needed.
-2. Review the S3 bucket for leftover original and processed objects.
-3. Review CloudWatch log retention and stored logs.
-4. Confirm that no other resources are required before deleting the stack.
-5. Follow the cleanup procedure in `SETUP.md` to delete the CloudFormation stack when the project is no longer needed.
-6. Verify the stack deletion and check the AWS console for resources that may remain.
+1. Review the S3 bucket for leftover original and processed objects.
+2. Review CloudWatch log retention and stored logs.
+3. Confirm that no other resources are required before deleting the stack.
+4. Have a human review and approve any object or stack cleanup, targeting only disposable test data and the exact isolated test stack.
+5. Verify any approved cleanup and check for resources that may remain.
 
 Check the actual resources and current AWS billing information rather than assuming that all services are free.
