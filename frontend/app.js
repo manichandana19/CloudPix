@@ -11,6 +11,7 @@
 ========================================================= */
 
 const API_STORAGE_KEY = "cloudpix_api_base";
+const DEFAULT_API_BASE = "https://45g0v7hvbh.execute-api.ap-south-1.amazonaws.com/prod";
 const THEME_STORAGE_KEY = "cloudpix_theme";
 const VIEW_STORAGE_KEY = "cloudpix_history_view";
 
@@ -71,11 +72,15 @@ const deletedImageIds = new Set();
 
 function apiBase() {
   try {
-    return (localStorage.getItem(API_STORAGE_KEY) || "")
+    const saved = (localStorage.getItem(API_STORAGE_KEY) || "")
       .trim()
       .replace(/\/+$/, "");
+
+    return saved && isValidApiBase(saved)
+      ? saved
+      : DEFAULT_API_BASE;
   } catch (_) {
-    return "";
+    return DEFAULT_API_BASE;
   }
 }
 
@@ -150,18 +155,11 @@ async function setApiBase() {
     return;
   }
 
-  if (!cleaned) {
-    allHistoryItems = [];
-
-    renderHistory();
-    updateStatistics();
-
-    notify("API endpoint cleared.");
-
-    return;
-  }
-
-  notify("API endpoint saved. Checking connection…");
+  notify(
+    cleaned
+      ? "API endpoint saved. Checking connection…"
+      : "API endpoint reset to the production default. Checking connection…"
+  );
 
   await refreshAll();
 }
